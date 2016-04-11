@@ -1,0 +1,26 @@
+{
+  "name": "iocJS",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "doc",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zwenbin1991/iocJS.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/zwenbin1991/iocJS/issues"
+  },
+  "homepage": "https://github.com/zwenbin1991/iocJS",
+  "devDependencies": {
+    "bearcat": "^0.4.29"
+  }
+}
