@@ -1,8 +1,6 @@
 (function (root, factory) {
     root.iocJS = factory(root, {});
 })(this, function (root, exports) {
-    'use strict';
-
     var fnArgsExp = /function[^(]*?\(\s*[^)]+\s*\)/i;
     var fnSingleLineCommentExp = /\/\/.*?\n/g;
     var fnMoreLineCommentExp = /\/\*(.|\s)*?\*\//g;
@@ -10,8 +8,8 @@
     var isAbsoluteUrlExp = /(http:\/\/|file:\/\/\/\w+:)/i;
     var fileExp = /([^/.]+)(\.js)?(\?.*?)?$/i;
     var trimExp = /\s+/g;
-
     var slice = Array.prototype.slice;
+    var EOL = '\r\n';
 
     var extend = function (target) {
         var args = target ? slice.call(arguments, 1) : slice.call(arguments), value;
@@ -107,13 +105,15 @@
 
     extend(ResolveClass.prototype, {
         getClassInstance: function (fn) {
-            var fnString = fn.toString(), fnArgsArray, fnPropsArray;
+            var fnString = fn.toString(), fnArgsArray, fnPropsArray, classString;
 
             fnString = this._clearComment(fnString);
             fnArgsArray = this._getArgsArray(fnString);
             fnPropsArray = this._getPropsArray(fnString);
 
-            fnString = this._groupNewFnString(fnString, fnArgsArray, fnPropsArray);
+            classString = this._buildClassString(fnString, fnArgsArray, fnPropsArray);
+
+            return this._executeClassString(classString);
         },
 
         _getArgsArray: function (fnString) {
@@ -130,14 +130,28 @@
                 .replace(fnMoreLineCommentExp, '');
         },
 
-        _groupNewFnString: function (fnString, fnArgsArray, fnPropsArray) {
-           var fnString = 'function glass('+ fnArgsArray.join(',') +'{';
+        _buildClassString: function (fnString, fnArgsArray, fnPropsArray) {
+           var fnString = 'function Glass('+ fnArgsArray.join(',') +'{';
+
+            fnPropsArray.forEach(function (prop) {
+                fnString += prop + EOL;
+            });
 
            fnString += '}';
+
+            return fnString;
         },
 
-        _executeClassString: function () {
+        _executeClassString: function (classString) {
+            try {
+                eval(classString);
 
+                return new Glass();
+            } catch (e) {
+                console.log('解析字符串函数出错，信息：' + e.stack);
+
+                return {};
+            }
         }
 
     });
