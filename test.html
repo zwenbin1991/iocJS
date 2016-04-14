@@ -6,5 +6,24 @@
 </head>
 <body>
     <script src="lib/bearcat.js"></script>
+    <script>
+//        bearcat.createApp();
+//        bearcat.use(['wjj']);
+//        bearcat.start(function () {
+//            var wjj = bearcat.getBean('wjj');
+//            //wjj.printGG();
+//        });
+var a = function () {
+    this.x = function () {};
+}
+a.prototype.wjj = function () {}
+
+var aa = new a;
+
+for (var key in aa) {
+    console.log(key);
+}
+
+    </script>
 </body>
 </html>

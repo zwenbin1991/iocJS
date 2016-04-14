@@ -4,7 +4,7 @@
     var fnArgsExp = /function[^(]*?\(\s*[^)]+\s*\)/i;
     var fnSingleLineCommentExp = /\/\/.*?\n/g;
     var fnMoreLineCommentExp = /\/\*(.|\s)*?\*\//g;
-    var fnPropsExp = /this(\.|\[\s*(\'|\")[\w-]*?(\'|\")\s*\])\w*\s*=(.|\s)*?;/g;
+    var fnPropsExp = /this(\.\$|\[\s*\$(\'|\")[\w-]*?(\'|\")\s*\])\w*\s*=(.|\s)*?;/g;
     var isAbsoluteUrlExp = /(http:\/\/|file:\/\/\/\w+:)/i;
     var fileExp = /([^/.]+)(\.js)?(\?.*?)?$/i;
     var trimExp = /\s+/g;
