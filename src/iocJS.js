@@ -1,31 +1,42 @@
-(function (root, factory) {
+/**
+ * javascript 依赖注入
+ *
+ * @author zengwenbin
+ * @email zwenbin@163.com
+ * @date 2016-4-14
+ * @version 1.0.0
+ */
+
+;(function (root, factory) {
     root.iocJS = factory(root, {});
 })(this, function (root, exports) {
     var fnArgsExp = /function[^(]*?\(\s*[^)]+\s*\)/i;
     var fnSingleLineCommentExp = /\/\/.*?\n/g;
     var fnMoreLineCommentExp = /\/\*(.|\s)*?\*\//g;
-    var fnPropsExp = /this(\.\$|\[\s*\$(\'|\")[\w-]*?(\'|\")\s*\])\w*\s*=(.|\s)*?;/g;
+    var fnPropsExp = /this(\.\$?|\[\s*\$?(\'|\")[\w-]*?(\'|\")\s*\])\w*\s*=(.|\s)*?;/g;
     var isAbsoluteUrlExp = /(http:\/\/|file:\/\/\/\w+:)/i;
     var fileExp = /([^/.]+)(\.js)?(\?.*?)?$/i;
     var trimExp = /\s+/g;
     var slice = Array.prototype.slice;
     var EOL = '\r\n';
 
-    var extend = function (target) {
-        var args = target ? slice.call(arguments, 1) : slice.call(arguments), value;
-        target || (target = this);
-
-        args.forEach(function (object) {
-            Object.keys(object).forEach(function (key) {
-                (value = (object[key])) != void 0 && (target[key] = value);
-            });
-        });
-
-        return target;
-    };
+    var headElement = document.head || document.documentElement.head;
 
     // 通用功能
-    var basicFeature = extend({}, {
+    var basicFeature = {
+        extend: function (target) {
+            var args = target ? slice.call(arguments, 1) : slice.call(arguments), value;
+            target || (target = this);
+
+            args.forEach(function (object) {
+                Object.keys(object).forEach(function (key) {
+                    (value = (object[key])) != void 0 && (target[key] = value);
+                });
+            });
+
+            return target;
+        },
+
         getBaseUrl: function () {
             var script = document.currentScript;
             var baseUrl = script.getAttribute('data-baseurl');
@@ -92,57 +103,66 @@
         trim: function (str) {
             return str.replace(trimExp, '');
         }
-    });
+    };
 
-    /*
-    * 函数对象解析类
-    * */
-    function ResolveClass () {
-        this.cacheClass = {};
-        this.id = '';
-        this.props = [];
-    }
-
-    extend(ResolveClass.prototype, {
+    // 解析函数对象
+    var resolveFnToClass = basicFeature.extend({}, {
         getClassInstance: function (fn) {
-            var fnString = fn.toString(), fnArgsArray, fnPropsArray, classString;
+            var fnString = this.clearComment(fn.toString());
+            var fnArgsArray = this.getArgsArray(fnString);
+            var fnOwnPropsArray = this.getOwnPropsArray(fnString);
+            var fnProtoPropsArray = this.getProtoPropsArray(fn);
+            var classString = this.getClassString(fnArgsArray, fnOwnPropsArray, fnProtoPropsArray);
 
-            fnString = this._clearComment(fnString);
-            fnArgsArray = this._getArgsArray(fnString);
-            fnPropsArray = this._getPropsArray(fnString);
-
-            classString = this._buildClassString(fnString, fnArgsArray, fnPropsArray);
-
-            return this._executeClassString(classString);
+            return this.executeClassString(classString);
         },
 
-        _getArgsArray: function (fnString) {
+        getArgsArray: function (fnString) {
             return fnArgsExp.test(fnString) ? basicFeature.trim(RegExp.$1).split(',') : [];
         },
 
-        _getPropsArray: function (fnString) {
+        getOwnPropsArray: function (fnString) {
             return fnString.match(fnPropsExp) || [];
         },
 
-        _clearComment: function (fnString) {
+        getProtoPropsArray: function (fn) {
+            var proto = fn.prototype;
+            var result = [], key;
+
+            for (key in proto) {
+                result.push({
+                    name: key,
+                    value: proto[key]
+                });
+            }
+
+            return result;
+        },
+
+        clearComment: function (fnString) {
             return fnString
                 .replace(fnSingleLineCommentExp, '')
                 .replace(fnMoreLineCommentExp, '');
         },
 
-        _buildClassString: function (fnString, fnArgsArray, fnPropsArray) {
-           var fnString = 'function Glass('+ fnArgsArray.join(',') +'{';
+        getClassString: function (fnArgsArray, fnOwnPropsArray, fnProtoPropsArray) {
+            var fnString = 'function Glass('+ fnArgsArray.join(',') +'{' + EOL;
 
-            fnPropsArray.forEach(function (prop) {
-                fnString += prop + EOL;
+            fnOwnPropsArray.forEach(function (ownProp) {
+                fnString += ownProp + EOL;
             });
+            fnString += '}' + EOL;
 
-           fnString += '}';
+            fnProtoPropsArray && (fnString += 'Glass.prototype.');
+
+            fnProtoPropsArray.forEach(function (protoProp) {
+                fnString += protoProp.name + '=' + protoProp.value.toString() + ';' + EOL;
+            });
 
             return fnString;
         },
 
-        _executeClassString: function (classString) {
+        executeClassString: function (classString) {
             try {
                 eval(classString);
 
@@ -153,69 +173,113 @@
                 return {};
             }
         }
-
     });
 
-    /*
-    * 模块类
-    * */
-    function Module () {
-
+    /**
+     * 模块类
+     * @constructor
+     *
+     * @param {String} id 模块标识
+     */
+    function Module (id) {
+        this.id = id;
+        new AsyncLoader(this.id, this.complete);
     }
 
-    extend(Module, {
-        state: {
-            init: 0,
-            loaded: 1,
-            interactive: 2,
-            complete: 3
-        }
-    })
+    basicFeature.extend(Module, {
+        cacheModules: {}
+    });
 
-    Module.prototype.initialize = function () {
-
-    };
-
-    /*
-    * 异步加载器类
-    * */
-    function AsyncLoader () {
-
-    }
-
-    extend(AsyncLoader.prototype, {
-        load: function () {},
-
-        _createScript: function () {
-
+    basicFeature.extend(Module.prototype, {
+        clone: function () {
+            return new this.constructor
         },
 
-        _complete: function () {
+        complete: function () {
+            var module = Module.cacheModules[this.id];
+            var deps = typeof module.$deps === 'string' ? [module.$deps] : module.$deps;
+
+            if (!deps.length) module.status = 4;
+
+            deps.forEach(function (dep) {
+                new AsyncLoader
+            });
+        },
+
+        beginExec: function () {
 
         }
     });
 
-    /*
-    *
-    * */
-    exports.initialize = function () {
+    /**
+     * 异步加载器类
+     * @constructor
+     *
+     * @param {String} id 模块标识(模块相对路径，名称必须和文件名保持一致)
+     * @param {Function} completeCallback 加载完成回调函数
+     */
+    function AsyncLoader (id, completeCallback) {
+        this.id = id;
+        this.completeCallback = completeCallback;
 
-    };
+        this.load();
+    }
+
+    basicFeature.extend(AsyncLoader.prototype, {
+        load: function () {
+            var baseUrl = basicFeature.getBaseUrl();
+            var id = this.id;
+            var path = basicFeature.getFullUrl(id, baseUrl);
+
+            this._createScript(path);
+        },
+
+        _createScript: function (path) {
+            var self = this;
+            var script = document.createElement('script');
+
+            script.charset = 'utf-8';
+            script.async = true;
+            script.src = path;
+
+            script.onerror = function () {
+                script.onerror = null;
+                headElement.removeChild(script);
+                self._outputError('加载模块失败，路径：' + path);
+            };
+
+            script.onload = function () {
+                script.onload = null;
+                headElement.removeChild(script);
+
+                self.completeCallback();
+            };
+
+            headElement.insertBefore(script, headElement.firstChild);
+        },
+
+        _outputError: function (msg) {
+            throw new Error(msg);
+        }
+    });
 
     /**
      * 生成模块导出对象
      *
      * @param {Function} fn 类
-     * @param {Object} exports 导出对象
      */
-    exports.buildModuleExports = function (fn, exports) {
-        var instance = basicFeature.getClassInstance(fn);
+    exports.buildModuleExports = function (fn) {
+        var instance = resolveFnToClass.getClassInstance(fn);
+        Module.cacheModules[instance.$id] = instance;
     };
 
-    /*
-    *
-    * */
-    exports.use = function () {
-
-    }
+    /**
+     * 使用模块
+     *
+     * @param {String} id 模块标识
+     * @return {Module}
+     */
+    exports.use = function (id) {
+        return Module.cacheModules[id] || new Module(id);
+    };
 });
