@@ -10,7 +10,7 @@
 ;(function (root, factory) {
     root.iocJS = factory(root, {});
 })(this, function (root, exports) {
-    var fnArgsExp = /function[^(]*?\(\s*[^)]+\s*\)/i;
+    var fnArgsExp = /function[^(]*?\((\s*[^)]+\s*)?\)/i;
     var fnSingleLineCommentExp = /\/\/.*?\n/g;
     var fnMoreLineCommentExp = /\/\*(.|\s)*?\*\//g;
     var fnPropsExp = /this(\.\$?|\[\s*\$?(\'|\")[\w-]*?(\'|\")\s*\])\w*\s*=(.|\s)*?;/g;
@@ -180,10 +180,13 @@
      * @constructor
      *
      * @param {String} id 模块标识
+     * @param {String} parentId 父模块标识
      */
-    function Module (id) {
+    function Module (id, parentId) {
         this.id = id;
-        new AsyncLoader(this.id, this.complete);
+        this.parentId = parentId;
+
+        new AsyncLoader(id, this.complete);
     }
 
     basicFeature.extend(Module, {
@@ -191,23 +194,61 @@
     });
 
     basicFeature.extend(Module.prototype, {
-        clone: function () {
-            return new this.constructor
+        clone: function (id) {
+            return new this.constructor(id);
         },
 
         complete: function () {
             var module = Module.cacheModules[this.id];
             var deps = typeof module.$deps === 'string' ? [module.$deps] : module.$deps;
 
-            if (!deps.length) module.status = 4;
+            if (!deps || !deps.length) {
+                module.status = 4;
+                this.exec();
+                return;
+            }
 
-            deps.forEach(function (dep) {
-                new AsyncLoader
-            });
+            module.count = 0;
+
+            deps.forEach((function (dep) {
+                this.clone(dep, this.id);
+            }).bind(this));
         },
 
-        beginExec: function () {
+        exec: function () {
+            var cacheModule = Module.cacheModules;
+            var factory = this.factory;
+            var factoryArgsArray = this.factoryArgsArray;
+            var module = null;
+            var parentModule = this.parentId && cacheModule[this.parentId];
+            var modules = factory && factoryArgsArray.reduce(function (initModules, nextName) {
+                if ((module = cacheModule[nextName]) instanceof Module) {
+                    initModules.push(module);
+                }
 
+                return initModules;
+            }, []), parentModuleDeps;
+
+            // 如果有父模块，并且加载完成，则当前当前模块是子模块
+            if (parentModule && parentModule.status === 4) {
+                parentModuleDeps = parentModule.deps;
+
+                // 父模块依赖全部完成，可以调用父类模块注册的factory
+                if (parentModule.count >= parentModuleDeps.length) {
+                    parentModule.factory.apply(parentModule)
+                }
+
+                parentModule.deps[parentModule.count++] = this;
+            } else {
+                factory.apply(this, modules);
+            }
+        },
+
+        injectFactory: function (fn) {
+            // 注册当前模块对象的factory方法
+            // 得到factory所要调用的模块标识集合
+            this.factory = fn;
+            this.factoryArgsArray = fn.toString().match(fnArgsExp)[1].split(',');
         }
     });
 
