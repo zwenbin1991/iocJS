@@ -5,28 +5,14 @@
     <title>Title</title>
 </head>
 <body>
+    <script src="src/iocJS.js"></script>
     <script>
-        var script = document.createElement('script');
-        script.src = 'm.js';
-        script.async = true;
-        script.onload = function () {
-            //alert('ie9');
-            console.log(script.readyState);
-        };
-        script.onerror = function (e) {
-            console.log(e);
-        };
+        iocJS.use('m').injectFactory(function (m) {
+            m.xxoo();
 
-
-
-        document.body.appendChild(script);
-//        bearcat.createApp();
-//        bearcat.use(['wjj']);
-//        bearcat.start(function () {
-//            var wjj = bearcat.getBean('wjj');
-//            //wjj.printGG();
-//        });
-
+            var md = iocJS.getModuleExports('m');
+            md.caobi();
+        });
     </script>
 </body>
 </html>

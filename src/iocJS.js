@@ -13,7 +13,8 @@
     var fnArgsExp = /function[^(]*?\((\s*[^)]+\s*)?\)/i;
     var fnSingleLineCommentExp = /\/\/.*?\n/g;
     var fnMoreLineCommentExp = /\/\*(.|\s)*?\*\//g;
-    var fnPropsExp = /this(\.\$?|\[\s*\$?(\'|\")[\w-]*?(\'|\")\s*\])\w*\s*=(.|\s)*?;/g;
+    var fnPropsExp = /this(\.\$?|\[\s*(\'|\")[\w\-$]*?(\'|\")\s*\])\w*\s*=(.|\s)*?;/g;
+    var fnDepsInvokeExp = /this(\.|\[\s*['"]([\w\-$])*?['"]\s*\])([\w$]*)/g;
     var isAbsoluteUrlExp = /(http:\/\/|file:\/\/\/\w+:)/i;
     var fileExp = /([^/.]+)(\.js)?(\?.*?)?$/i;
     var trimExp = /\s+/g;
@@ -106,7 +107,7 @@
         }
     };
 
-    // 解析函数对象
+    // 函数解析对象
     var resolveFnToClass = basicFeature.extend({}, {
         getClassInstance: function (fn) {
             var fnString = this.clearComment(fn.toString());
@@ -133,11 +134,21 @@
             for (key in proto) {
                 result.push({
                     name: key,
-                    value: proto[key]
+                    value: this.resolveDepsToProtoFn(proto[key])
                 });
             }
 
             return result;
+        },
+
+        resolveDepsToProtoFn: function (protoFn) {
+            var protoFnString = protoFn.toString(), id;
+
+            return protoFnString.replace(fnDepsInvokeExp, function (match, dotOperator, bracketProp, dotProp) {
+                id = dotOperator ? dotProp.slice(1) : bracketProp.slice(1);
+
+                return 'iocJS.getModuleExports('+ id +')';
+            });
         },
 
         clearComment: function (fnString) {
