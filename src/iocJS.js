@@ -18,6 +18,7 @@
     var fileExp = /([^/.]+)(\.js)?(\?.*?)?$/i;
     var trimExp = /\s+/g;
     var slice = Array.prototype.slice;
+    var toString = Object.prototype.toString;
     var EOL = '\r\n';
 
     var headElement = document.head || document.documentElement.head;
@@ -39,7 +40,7 @@
 
         getBaseUrl: function () {
             var script = document.currentScript;
-            var baseUrl = script.getAttribute('data-baseurl');
+            var baseUrl = script.getAttribute('data-baseurl') || './';
             var pageUrl = root.location.href;
 
             return this.mergeDir(baseUrl, pageUrl);
@@ -118,7 +119,7 @@
         },
 
         getArgsArray: function (fnString) {
-            return fnArgsExp.test(fnString) ? basicFeature.trim(RegExp.$1).split(',') : [];
+            return fnArgsExp.test(fnString) ? basicFeature.trim(RegExp.$1 || '').split(',') : [];
         },
 
         getOwnPropsArray: function (fnString) {
@@ -146,17 +147,15 @@
         },
 
         getClassString: function (fnArgsArray, fnOwnPropsArray, fnProtoPropsArray) {
-            var fnString = 'function Glass('+ fnArgsArray.join(',') +'{' + EOL;
+            var fnString = 'function Glass('+ fnArgsArray.join(',') +'){' + EOL;
 
             fnOwnPropsArray.forEach(function (ownProp) {
                 fnString += ownProp + EOL;
             });
             fnString += '}' + EOL;
 
-            fnProtoPropsArray && (fnString += 'Glass.prototype.');
-
             fnProtoPropsArray.forEach(function (protoProp) {
-                fnString += protoProp.name + '=' + protoProp.value.toString() + ';' + EOL;
+                fnString += 'Glass.prototype.' + protoProp.name + '=' + protoProp.value.toString() + ';' + EOL;
             });
 
             return fnString;
@@ -186,7 +185,7 @@
         this.id = id;
         this.parentId = parentId;
 
-        new AsyncLoader(id, this.complete);
+        new AsyncLoader(id, this.complete());
     }
 
     basicFeature.extend(Module, {
@@ -199,20 +198,24 @@
         },
 
         complete: function () {
-            var module = Module.cacheModules[this.id];
-            var deps = typeof module.$deps === 'string' ? [module.$deps] : module.$deps;
+            var self = this;
 
-            if (!deps || !deps.length) {
-                module.status = 4;
-                this.exec();
-                return;
-            }
+            return function () {
+                var module = Module.cacheModules[self.id];
+                var deps = typeof module.$deps === 'string' ? [module.$deps] : module.$deps;
 
-            module.count = 0;
+                if (!deps || !deps.length) {
+                    module.status = 4;
+                    self.exec();
+                    return;
+                }
 
-            deps.forEach((function (dep) {
-                this.clone(dep, this.id);
-            }).bind(this));
+                module.count = 0;
+
+                deps.forEach((function (dep) {
+                    this.clone(dep, this);
+                }).bind(self));
+            };
         },
 
         exec: function () {
@@ -221,10 +224,8 @@
             var factoryArgsArray = this.factoryArgsArray;
             var module = null;
             var parentModule = this.parentId && cacheModule[this.parentId];
-            var modules = factory && factoryArgsArray.reduce(function (initModules, nextName) {
-                if ((module = cacheModule[nextName]) instanceof Module) {
-                    initModules.push(module);
-                }
+            var modules = factoryArgsArray && factoryArgsArray.reduce(function (initModules, nextName) {
+                if ((module = cacheModule[nextName])) initModules.push(module);
 
                 return initModules;
             }, []), parentModuleDeps;
@@ -305,11 +306,11 @@
     });
 
     /**
-     * 生成模块导出对象
+     * 设置模块导出对象
      *
      * @param {Function} fn 类
      */
-    exports.buildModuleExports = function (fn) {
+    exports.setModuleExports = function (fn) {
         var instance = resolveFnToClass.getClassInstance(fn);
         Module.cacheModules[instance.$id] = instance;
     };
@@ -321,6 +322,18 @@
      * @return {Module}
      */
     exports.use = function (id) {
-        return Module.cacheModules[id] || new Module(id);
+        return new Module(id);
     };
+
+    /**
+     * 得到模块导出对象
+     *
+     * @param {String} id 模块标识
+     * @return {Glass}
+     */
+    exports.getModuleExports = function (id) {
+        return Module.cacheModules[id];
+    };
+
+    return exports;
 });
