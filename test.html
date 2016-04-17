@@ -7,11 +7,19 @@
 <body>
     <script src="src/iocJS.js"></script>
     <script>
-        iocJS.use('m').injectFactory(function (m) {
-            m.xxoo();
+        iocJS.use('main').injectFactory(function (m, login, reg) {
+            // 第一种方式，参数列表对应依赖模块
+            reg.register();
+            login.login();
+            console.log('\r\n');
 
-            var md = iocJS.getModuleExports('m');
-            md.caobi();
+            // 第二种方式，通过在模块中调用依赖模块
+            m.getTotalValue();
+            console.log('\r\n');
+
+            // 第三种方式，通过内置方法调用依赖模块
+            var regModule = iocJS.getModule('reg');
+            regModule.register();
         });
     </script>
 </body>

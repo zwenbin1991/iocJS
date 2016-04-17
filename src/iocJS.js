@@ -10,7 +10,7 @@
 ;(function (root, factory) {
     root.iocJS = factory(root, {});
 })(this, function (root, exports) {
-    var fnArgsExp = /function[^(]*?\((\s*[^)]+\s*)?\)/i;
+    var fnArgsExp = /function[^(]*?\(([^)]*?)?\)/i;
     var fnSingleLineCommentExp = /\/\/.*?\n/g;
     var fnMoreLineCommentExp = /\/\*(.|\s)*?\*\//g;
     var fnPropsExp = /this(\.\$?|\[\s*(\'|\")[\w\-$]*?(\'|\")\s*\])\w*\s*=(.|\s)*?;/g;
@@ -23,6 +23,7 @@
     var EOL = '\r\n';
 
     var headElement = document.head || document.documentElement.head;
+    var currentScript = document.currentScript;
 
     // 通用功能
     var basicFeature = {
@@ -40,11 +41,26 @@
         },
 
         getBaseUrl: function () {
-            var script = document.currentScript;
-            var baseUrl = script.getAttribute('data-baseurl') || './';
+            var baseUrl = currentScript.getAttribute('data-baseurl') || './';
             var pageUrl = root.location.href;
 
             return this.mergeDir(baseUrl, pageUrl);
+        },
+
+        getFullUrl: function (dir, url) {
+            var isAbsoluteUrl = isAbsoluteUrlExp.test(dir), baseUrl, filename, suffix, extra;
+
+            if (isAbsoluteUrl) {
+                url = dir;
+                dir = '';
+            }
+
+            baseUrl = this.mergeDir(dir, url);
+            filename = fileExp.test(dir || url) && RegExp.$1;
+            suffix = RegExp.$2 || '.js';
+            extra = RegExp.$3 || '';
+
+            return baseUrl + filename + suffix + extra;
         },
 
         mergeDir: function (dir, url) {
@@ -86,24 +102,14 @@
             return url.slice(-1) === '/' ? url : url + '/';
         },
 
-        getFullUrl: function (dir, url) {
-            var isAbsoluteUrl = isAbsoluteUrlExp.test(dir), baseUrl, filename, suffix, extra;
-
-            if (isAbsoluteUrl) {
-                url = dir;
-                dir = '';
-            }
-
-            baseUrl = this.mergeDir(dir, url);
-            filename = fileExp.test(dir || url) && RegExp.$1;
-            suffix = RegExp.$2 || '.js';
-            extra = RegExp.$3 || '';
-
-            return baseUrl + filename + suffix + extra;
-        },
-
         trim: function (str) {
             return str.replace(trimExp, '');
+        },
+
+        getArrayItemByKey: function (array, key, value) {
+            return array.filter(function (item) {
+                return item[key] === value;
+            })[0];
         }
     };
 
@@ -142,12 +148,12 @@
         },
 
         resolveDepsToProtoFn: function (protoFn) {
-            var protoFnString = protoFn.toString(), id;
+            var protoFnString = this.clearComment(protoFn.toString()), id;
 
             return protoFnString.replace(fnDepsInvokeExp, function (match, dotOperator, bracketProp, dotProp) {
                 id = dotOperator ? dotProp.slice(1) : bracketProp.slice(1);
 
-                return 'iocJS.getModuleExports('+ id +')';
+                return 'iocJS.getModule(\''+ id +'\')';
             });
         },
 
@@ -204,8 +210,8 @@
     });
 
     basicFeature.extend(Module.prototype, {
-        clone: function (id) {
-            return new this.constructor(id);
+        clone: function (id, parentId) {
+            return new this.constructor(id, parentId);
         },
 
         complete: function () {
@@ -214,45 +220,51 @@
             return function () {
                 var module = Module.cacheModules[self.id];
                 var deps = typeof module.$deps === 'string' ? [module.$deps] : module.$deps;
+                module.status = 4;
 
                 if (!deps || !deps.length) {
-                    module.status = 4;
                     self.exec();
                     return;
                 }
 
-                module.count = 0;
+                module.factory = self.factory;
+                module.factoryArgsArray = self.factoryArgsArray;
+                module.depCount = 0;
 
                 deps.forEach((function (dep) {
-                    this.clone(dep, this);
+                    this.clone(dep, this.id);
                 }).bind(self));
             };
         },
 
         exec: function () {
-            var cacheModule = Module.cacheModules;
-            var factory = this.factory;
-            var factoryArgsArray = this.factoryArgsArray;
-            var module = null;
-            var parentModule = this.parentId && cacheModule[this.parentId];
-            var modules = factoryArgsArray && factoryArgsArray.reduce(function (initModules, nextName) {
-                if ((module = cacheModule[nextName])) initModules.push(module);
+            var cacheModules = Module.cacheModules;
+            var parentModule = this.parentId && cacheModules[this.parentId], module, parentModuleDeps, factory, factoryArgsArray;
 
-                return initModules;
-            }, []), parentModuleDeps;
-
-            // 如果有父模块，并且加载完成，则当前当前模块是子模块
+            // 如果当前存在父模块，则判断父模块的所有依赖是否完成，完成则调用父模块的factory
+            // 反之如果当前模块就是父模块，则直接调用factory
             if (parentModule && parentModule.status === 4) {
-                parentModuleDeps = parentModule.deps;
+
+                parentModule.$deps[parentModule.depCount++] = {
+                    key: this.id,
+                    value: this
+                };
 
                 // 父模块依赖全部完成，可以调用父类模块注册的factory
-                if (parentModule.count >= parentModuleDeps.length) {
-                    parentModule.factory.apply(parentModule)
+                if (parentModule.depCount == parentModule.$deps.length) {
+                    factory = parentModule.factory;
+                    factoryArgsArray = parentModule.factoryArgsArray;
+                    parentModuleDeps = factoryArgsArray && factoryArgsArray.slice(1).map(function (arg) {
+                        return cacheModules[arg];
+                    });
+
+                    factory.apply(null, [parentModule].concat(parentModuleDeps));
                 }
 
-                parentModule.deps[parentModule.count++] = this;
             } else {
-                factory.apply(this, modules);
+                module = cacheModules[this.id];
+                factory = module.factory;
+                factory && factory.call(null, module);
             }
         },
 
@@ -260,7 +272,7 @@
             // 注册当前模块对象的factory方法
             // 得到factory所要调用的模块标识集合
             this.factory = fn;
-            this.factoryArgsArray = fn.toString().match(fnArgsExp)[1].split(',');
+            this.factoryArgsArray = basicFeature.trim(fn.toString().match(fnArgsExp)[1]).split(',');
         }
     });
 
@@ -342,7 +354,7 @@
      * @param {String} id 模块标识
      * @return {Glass}
      */
-    exports.getModuleExports = function (id) {
+    exports.getModule = function (id) {
         return Module.cacheModules[id];
     };
 
